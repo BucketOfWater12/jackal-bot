@@ -8,7 +8,6 @@ from flask import Flask
 from google.oauth2.service_account import Credentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-import uvicorn
 
 # ✅ Flask App for Cloud Run Health Check
 app = Flask(__name__)
@@ -22,9 +21,12 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# ✅ Connect to Google Sheets
+# ✅ Fix: Set Correct OAuth Scopes
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 google_credentials = json.loads(GOOGLE_CREDENTIALS_JSON)
-creds = Credentials.from_service_account_info(google_credentials)
+creds = Credentials.from_service_account_info(google_credentials, scopes=SCOPES)
+
+# ✅ Connect to Google Sheets
 client = gspread.authorize(creds)
 sheet = client.open(SPREADSHEET_NAME).sheet1
 
@@ -141,16 +143,11 @@ async def start_telegram_bot():
     print("✅ Jackal Medical Bot is running on Railway!")
     await bot_app.run_polling()
 
-# ✅ Start Everything (Flask + Telegram Bot)
-async def main():
-    # Run both Flask and Telegram bot together
-    asyncio.create_task(start_telegram_bot())
-
-    # Use Uvicorn for running Flask server (Production-ready)
-    config = uvicorn.Config(app, host="0.0.0.0", port=8080, log_level="info")
-    server = uvicorn.Server(config)
-    await server.serve()
-
-# Run main event loop
+# ✅ Start Everything (Flask as Main Process)
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.create_task(start_telegram_bot())
+
+    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
