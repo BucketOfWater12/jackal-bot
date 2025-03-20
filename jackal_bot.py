@@ -3,8 +3,9 @@ import gspread
 import json
 import os
 import datetime
-import threading
+import asyncio
 from flask import Flask
+from google.cloud import secretmanager
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -16,14 +17,18 @@ app = Flask(__name__)
 def home():
     return "✅ Jackal Bot is running on Railway!"
 
+# ✅ Function to Access Environment Variables (Instead of Google Secret Manager)
+def access_secret(secret_name):
+    return os.getenv(secret_name)
+
 # ✅ Load Secrets from Railway Environment Variables
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GOOGLE_CREDENTIALS = json.loads(os.getenv("GOOGLE_CREDENTIALS_JSON"))
-SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME", "Jackal Medical Data")
+TELEGRAM_BOT_TOKEN = access_secret("TELEGRAM_BOT_TOKEN")
+google_credentials = json.loads(access_secret("GOOGLE_CREDENTIALS_JSON"))
+SPREADSHEET_NAME = access_secret("SPREADSHEET_NAME")
 
 # ✅ Connect to Google Sheets
 creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    GOOGLE_CREDENTIALS, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    google_credentials, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 )
 client = gspread.authorize(creds)
 sheet = client.open(SPREADSHEET_NAME).sheet1
@@ -129,8 +134,8 @@ async def update_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "https://docs.google.com/forms/d/e/1FAIpQLSeb1nvty2OuR4WXp8MNsR4SuBs1vhQ1Nyx0n_b8Dmaaj53AZQ/viewform?usp=dialog"
     )
 
-# ✅ Start Telegram Bot in a Separate Thread
-def start_telegram_bot():
+# ✅ Start Telegram Bot Properly
+async def start_telegram_bot():
     bot_app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("help", help_command))
@@ -140,9 +145,15 @@ def start_telegram_bot():
     bot_app.add_handler(CommandHandler("update", update_status))
     
     print("✅ Jackal Medical Bot is running on Railway!")
-    bot_app.run_polling()
 
-# ✅ Start Everything (Flask as Main Process)
+    # 🔹 Correctly handle asyncio event loop
+    loop = asyncio.get_event_loop()
+    await bot_app.run_polling()
+
+# ✅ Run Flask Server and Telegram Bot Together
 if __name__ == "__main__":
-    threading.Thread(target=start_telegram_bot, daemon=True).start()
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_telegram_bot())  # Run the Telegram bot in the loop
+
+    # Run Flask server for health checks
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
