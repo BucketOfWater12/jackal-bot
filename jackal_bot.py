@@ -23,7 +23,10 @@ SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
 # ✅ Connect to Google Sheets
 google_credentials = json.loads(GOOGLE_CREDENTIALS_JSON)
-creds = Credentials.from_service_account_info(google_credentials)
+creds = Credentials.from_service_account_info(
+    google_credentials,
+    scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+)
 client = gspread.authorize(creds)
 sheet = client.open(SPREADSHEET_NAME).sheet1
 
@@ -144,7 +147,9 @@ async def start_telegram_bot():
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
-    loop.create_task(start_telegram_bot())
 
-    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+    # Start Telegram Bot and Flask at the same time
+    loop.run_until_complete(asyncio.gather(
+        start_telegram_bot(),
+        loop.run_in_executor(None, lambda: app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False))
+    ))
