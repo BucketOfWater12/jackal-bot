@@ -144,12 +144,12 @@ async def start_telegram_bot():
     await bot_app.run_polling()
 
 # ✅ Start Everything (Flask as Main Process)
-if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+import threading
 
-    # Start Telegram Bot and Flask at the same time
-    loop.run_until_complete(asyncio.gather(
-        start_telegram_bot(),
-        loop.run_in_executor(None, lambda: app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False))
-    ))
+if __name__ == "__main__":
+    # Start Flask in one thread
+    flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False))
+    flask_thread.start()
+
+    # Start Telegram bot in the main event loop
+    asyncio.run(start_telegram_bot())
