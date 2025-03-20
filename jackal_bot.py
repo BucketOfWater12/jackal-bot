@@ -2,12 +2,10 @@ import logging
 import gspread
 import json
 import os
-import datetime
 import asyncio
-import threading
+import datetime
 from flask import Flask
-from google.cloud import secretmanager
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -18,22 +16,16 @@ app = Flask(__name__)
 def home():
     return "✅ Jackal Bot is running on Railway!"
 
-# ✅ Function to Access Google Secret Manager
-def access_secret(secret_name):
-    return os.getenv(secret_name)  # Fetch directly from Railway environment variables
-
-# ✅ Load Secrets from Railway Environment Variables
-TELEGRAM_BOT_TOKEN = access_secret("TELEGRAM_BOT_TOKEN")
-google_credentials = json.loads(access_secret("GOOGLE_CREDENTIALS_JSON"))
-spreadsheet_name = access_secret("SPREADSHEET_NAME")
-
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    google_credentials, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-)
+# ✅ Load Environment Variables (from Railway)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
+SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
 # ✅ Connect to Google Sheets
+google_credentials = json.loads(GOOGLE_CREDENTIALS_JSON)
+creds = Credentials.from_service_account_info(google_credentials)
 client = gspread.authorize(creds)
-sheet = client.open(spreadsheet_name).sheet1
+sheet = client.open(SPREADSHEET_NAME).sheet1
 
 # ✅ Logging Setup
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -42,7 +34,7 @@ logger = logging.getLogger(__name__)
 # ✅ Function to Get Medical Status
 def get_medical_status(syn_no):
     try:
-        form_sheet = client.open(spreadsheet_name).worksheet("Form responses 1")
+        form_sheet = client.open(SPREADSHEET_NAME).worksheet("Form responses 1")
         form_data = form_sheet.get_all_records()
         today = datetime.datetime.today().date()
 
@@ -116,13 +108,27 @@ async def search_pes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     await update.message.reply_text(response if response else "No personnel found with this PES status.")
 
+async def show_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    data = sheet.get_all_records()
+    response = ""
+
+    for row in data:
+        syn_no = row['SYN NO']
+        status = get_medical_status(syn_no)
+        response += f"{row['RANK']} {row['NAME']}\nPES: {row['PES']}"
+        if status:
+            response += f"\n{status}"
+        response += "\n\n"
+
+    await update.message.reply_text(response)
+
 async def update_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "To update Medical Status, please use this form:\n"
         "https://docs.google.com/forms/d/e/1FAIpQLSeb1nvty2OuR4WXp8MNsR4SuBs1vhQ1Nyx0n_b8Dmaaj53AZQ/viewform?usp=dialog"
     )
 
-# ✅ Telegram Bot Function
+# ✅ Start Telegram Bot
 async def start_telegram_bot():
     bot_app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     bot_app.add_handler(CommandHandler("start", start))
@@ -138,9 +144,7 @@ async def start_telegram_bot():
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-
-    # Run Telegram bot asynchronously
+    
     loop.create_task(start_telegram_bot())
 
-    # Start Flask
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
