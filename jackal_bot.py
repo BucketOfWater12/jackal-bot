@@ -8,6 +8,7 @@ from flask import Flask
 from google.oauth2.service_account import Credentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+import uvicorn
 
 # ✅ Flask App for Cloud Run Health Check
 app = Flask(__name__)
@@ -21,17 +22,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# ✅ Ensure Environment Variables Exist
-if not TELEGRAM_BOT_TOKEN or not GOOGLE_CREDENTIALS_JSON or not SPREADSHEET_NAME:
-    raise ValueError("🚨 Missing required environment variables!")
-
-# ✅ Connect to Google Sheets with Correct OAuth Scopes
+# ✅ Connect to Google Sheets
 google_credentials = json.loads(GOOGLE_CREDENTIALS_JSON)
-scopes = [
-    "https://www.googleapis.com/auth/spreadsheets", 
-    "https://www.googleapis.com/auth/drive"
-]
-creds = Credentials.from_service_account_info(google_credentials, scopes=scopes)
+creds = Credentials.from_service_account_info(google_credentials)
 client = gspread.authorize(creds)
 sheet = client.open(SPREADSHEET_NAME).sheet1
 
@@ -148,14 +141,16 @@ async def start_telegram_bot():
     print("✅ Jackal Medical Bot is running on Railway!")
     await bot_app.run_polling()
 
-# ✅ Start Everything (Flask as Main Process)
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    
-    # ✅ Ensure event loop is running properly
-    if loop.is_running():
-        asyncio.ensure_future(start_telegram_bot())
-    else:
-        loop.run_until_complete(start_telegram_bot())
+# ✅ Start Everything (Flask + Telegram Bot)
+async def main():
+    # Run both Flask and Telegram bot together
+    asyncio.create_task(start_telegram_bot())
 
-    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+    # Use Uvicorn for running Flask server (Production-ready)
+    config = uvicorn.Config(app, host="0.0.0.0", port=8080, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
+
+# Run main event loop
+if __name__ == "__main__":
+    asyncio.run(main())
