@@ -5,29 +5,25 @@ import os
 import datetime
 import threading
 from flask import Flask
-from google.cloud import secretmanager
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ✅ Flask App for Cloud Run Health Check
+# ✅ Flask App for Health Check
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "✅ Jackal Bot is running on Cloud Run!"
+    return "✅ Jackal Bot is running on Railway!"
 
-# ✅ Function to Access Google Secret Manager
-def access_secret(secret_name):
-    client = secretmanager.SecretManagerServiceClient()
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-    response = client.access_secret_version(name=name)
-    return response.payload.data.decode("UTF-8")
+# ✅ Load Secrets from Railway's Environment Variables
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+google_credentials_json = os.getenv("GOOGLE_CREDENTIALS")
 
-# ✅ Load Secrets from Google Secret Manager
-TELEGRAM_BOT_TOKEN = access_secret("TELEGRAM_BOT_TOKEN")
-google_credentials = json.loads(access_secret("Google_Credentials"))
+if not TELEGRAM_BOT_TOKEN or not google_credentials_json:
+    raise ValueError("❌ Missing TELEGRAM_BOT_TOKEN or GOOGLE_CREDENTIALS in Railway.")
+
+google_credentials = json.loads(google_credentials_json)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(
     google_credentials, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 )
@@ -146,10 +142,11 @@ def start_telegram_bot():
     bot_app.add_handler(CommandHandler("pes", search_pes))
     bot_app.add_handler(CommandHandler("update", update_status))
     
-    print("✅ Jackal Medical Bot is running on Cloud Run!")
+    print("✅ Jackal Medical Bot is running on Railway!")
     bot_app.run_polling()
 
 # ✅ Start Everything (Flask as Main Process)
 if __name__ == "__main__":
     threading.Thread(target=start_telegram_bot, daemon=True).start()
-    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+    port = int(os.getenv("PORT", 8080))  # Railway uses this port
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
