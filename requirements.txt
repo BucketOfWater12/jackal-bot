@@ -1,5 +1,6 @@
-Flask
-python-telegram-bot
 gspread
-oauth2client
-google-cloud-secret-manager
+google-auth
+google-auth-oauthlib
+python-telegram-bot
+flask
+uvicorn
