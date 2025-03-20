@@ -9,28 +9,24 @@ from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ✅ Flask App for Health Check
+# ✅ Flask App for Railway Health Check
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return "✅ Jackal Bot is running on Railway!"
 
-# ✅ Load Secrets from Railway's Environment Variables
+# ✅ Load Secrets from Railway Environment Variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-google_credentials_json = os.getenv("GOOGLE_CREDENTIALS")
-
-if not TELEGRAM_BOT_TOKEN or not google_credentials_json:
-    raise ValueError("❌ Missing TELEGRAM_BOT_TOKEN or GOOGLE_CREDENTIALS in Railway.")
-
-google_credentials = json.loads(google_credentials_json)
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    google_credentials, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-)
+GOOGLE_CREDENTIALS = json.loads(os.getenv("GOOGLE_CREDENTIALS_JSON"))
+SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME", "Jackal Medical Data")
 
 # ✅ Connect to Google Sheets
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    GOOGLE_CREDENTIALS, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+)
 client = gspread.authorize(creds)
-sheet = client.open("Jackal Medical Data").sheet1
+sheet = client.open(SPREADSHEET_NAME).sheet1
 
 # ✅ Logging Setup
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -39,7 +35,7 @@ logger = logging.getLogger(__name__)
 # ✅ Function to Get Medical Status
 def get_medical_status(syn_no):
     try:
-        form_sheet = client.open("Jackal Medical Data").worksheet("Form responses 1")
+        form_sheet = client.open(SPREADSHEET_NAME).worksheet("Form responses 1")
         form_data = form_sheet.get_all_records()
         today = datetime.datetime.today().date()
 
@@ -140,6 +136,7 @@ def start_telegram_bot():
     bot_app.add_handler(CommandHandler("help", help_command))
     bot_app.add_handler(CommandHandler("search", search_user))
     bot_app.add_handler(CommandHandler("pes", search_pes))
+    bot_app.add_handler(CommandHandler("all", show_all))
     bot_app.add_handler(CommandHandler("update", update_status))
     
     print("✅ Jackal Medical Bot is running on Railway!")
@@ -148,5 +145,4 @@ def start_telegram_bot():
 # ✅ Start Everything (Flask as Main Process)
 if __name__ == "__main__":
     threading.Thread(target=start_telegram_bot, daemon=True).start()
-    port = int(os.getenv("PORT", 8080))  # Railway uses this port
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
