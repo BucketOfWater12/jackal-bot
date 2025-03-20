@@ -4,7 +4,6 @@ import json
 import os
 import asyncio
 import datetime
-import threading
 from flask import Flask
 from google.oauth2.service_account import Credentials
 from telegram import Update
@@ -22,9 +21,17 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
 
-# ✅ Connect to Google Sheets
+# ✅ Ensure Environment Variables Exist
+if not TELEGRAM_BOT_TOKEN or not GOOGLE_CREDENTIALS_JSON or not SPREADSHEET_NAME:
+    raise ValueError("🚨 Missing required environment variables!")
+
+# ✅ Connect to Google Sheets with Correct OAuth Scopes
 google_credentials = json.loads(GOOGLE_CREDENTIALS_JSON)
-creds = Credentials.from_service_account_info(google_credentials)
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets", 
+    "https://www.googleapis.com/auth/drive"
+]
+creds = Credentials.from_service_account_info(google_credentials, scopes=scopes)
 client = gspread.authorize(creds)
 sheet = client.open(SPREADSHEET_NAME).sheet1
 
@@ -143,10 +150,12 @@ async def start_telegram_bot():
 
 # ✅ Start Everything (Flask as Main Process)
 if __name__ == "__main__":
-    # Start Flask in a separate thread
-    flask_thread = threading.Thread(target=lambda: app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False))
-    flask_thread.start()
-
-    # Run Telegram bot inside the existing event loop
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(start_telegram_bot())
+    
+    # ✅ Ensure event loop is running properly
+    if loop.is_running():
+        asyncio.ensure_future(start_telegram_bot())
+    else:
+        loop.run_until_complete(start_telegram_bot())
+
+    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
